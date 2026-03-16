@@ -17,6 +17,10 @@ public static class ImportEndpoints
             if (file is null || file.Length == 0)
                 return Results.BadRequest(new { error = "No file uploaded" });
 
+            const long maxFileSize = 10 * 1024 * 1024; // 10 MB
+            if (file.Length > maxFileSize)
+                return Results.BadRequest(new { error = $"File too large ({file.Length / 1024 / 1024} MB). Maximum allowed size is 10 MB." });
+
             try
             {
                 var result = await importService.ImportStatementAsync(file.OpenReadStream());

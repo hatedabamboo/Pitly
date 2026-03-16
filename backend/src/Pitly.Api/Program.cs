@@ -16,12 +16,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=pitly.db"));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddHttpClient("Nbp");
 builder.Services.AddScoped<INbpExchangeRateService>(sp =>
     new NbpExchangeRateService(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("Nbp")));
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("Nbp"),
+        sp.GetRequiredService<ILogger<NbpExchangeRateService>>()));
 
 builder.Services.AddScoped<IStatementParser, InteractiveBrokersStatementParser>();
 builder.Services.AddScoped<ICapitalGainsTaxCalculator, CapitalGainsTaxCalculator>();

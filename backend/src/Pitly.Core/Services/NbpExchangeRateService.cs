@@ -2,17 +2,20 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Pitly.Core.Services;
 
 public class NbpExchangeRateService : INbpExchangeRateService
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<NbpExchangeRateService> _logger;
     private readonly ConcurrentDictionary<string, decimal> _cache = new();
 
-    public NbpExchangeRateService(HttpClient httpClient)
+    public NbpExchangeRateService(HttpClient httpClient, ILogger<NbpExchangeRateService> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public async Task<decimal> GetRateAsync(string currency, DateTime transactionDate)
@@ -38,6 +41,7 @@ public class NbpExchangeRateService : INbpExchangeRateService
 
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
+                    _logger.LogDebug("NBP rate not found for {Currency} on {Date}, trying previous day", currency, dateStr);
                     rateDate = rateDate.AddDays(-1);
                     continue;
                 }
@@ -52,14 +56,18 @@ public class NbpExchangeRateService : INbpExchangeRateService
                     .GetDecimal();
 
                 _cache.TryAdd(cacheKey, rate);
+                _logger.LogDebug("NBP rate for {Currency} on {Date}: {Rate}", currency, dateStr, rate);
                 return rate;
             }
-            catch (HttpRequestException) when (attempt < 4)
+            catch (HttpRequestException ex) when (attempt < 4)
             {
+                _logger.LogWarning(ex, "NBP API request failed for {Currency} on {Date} (attempt {Attempt}/5), retrying",
+                    currency, dateStr, attempt + 1);
                 rateDate = rateDate.AddDays(-1);
             }
         }
 
+        _logger.LogError("Failed to get NBP rate for {Currency} near {Date} after 5 attempts", currency, transactionDate);
         throw new InvalidOperationException(
             $"Could not find NBP exchange rate for {currency} near {transactionDate:yyyy-MM-dd} after 5 attempts.");
     }

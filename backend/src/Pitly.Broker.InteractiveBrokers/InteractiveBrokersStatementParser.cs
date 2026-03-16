@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Pitly.Core.Models;
 using Pitly.Core.Parsing;
 
@@ -8,6 +9,13 @@ namespace Pitly.Broker.InteractiveBrokers;
 
 public partial class InteractiveBrokersStatementParser : IStatementParser
 {
+    private readonly ILogger<InteractiveBrokersStatementParser> _logger;
+
+    public InteractiveBrokersStatementParser(ILogger<InteractiveBrokersStatementParser> logger)
+    {
+        _logger = logger;
+    }
+
     public ParsedStatement Parse(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -58,7 +66,7 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
         return new ParsedStatement(trades, dividends, withholdingTaxes);
     }
 
-    private static void TryParseTrade(List<string> fields, List<Trade> trades)
+    private void TryParseTrade(List<string> fields, List<Trade> trades)
     {
         // CSV: Trades,Data,DataDiscriminator,AssetCategory,Currency,Symbol,DateTime,Qty,Price,CPrice,Proceeds,Comm,Basis,RealizedPnL,MTM,Code
         // Index: 0     1    2                3             4        5      6        7   8     9      10       11   12    13          14  15
@@ -84,11 +92,31 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
         var commissionStr = Clean(fields[11]);
         var realizedPnlStr = Clean(fields[13]);
 
-        if (!TryParseDateTime(dateTimeStr, out var dateTime)) return;
-        if (!TryParseDecimal(quantityStr, out var quantity)) return;
-        if (!TryParseDecimal(priceStr, out var price)) return;
-        if (!TryParseDecimal(proceedsStr, out var proceeds)) return;
-        if (!TryParseDecimal(commissionStr, out var commission)) return;
+        if (!TryParseDateTime(dateTimeStr, out var dateTime))
+        {
+            _logger.LogWarning("Skipping trade row for {Symbol}: could not parse date '{DateStr}'", symbol, dateTimeStr);
+            return;
+        }
+        if (!TryParseDecimal(quantityStr, out var quantity))
+        {
+            _logger.LogWarning("Skipping trade row for {Symbol} on {Date}: could not parse quantity '{QuantityStr}'", symbol, dateTimeStr, quantityStr);
+            return;
+        }
+        if (!TryParseDecimal(priceStr, out var price))
+        {
+            _logger.LogWarning("Skipping trade row for {Symbol} on {Date}: could not parse price '{PriceStr}'", symbol, dateTimeStr, priceStr);
+            return;
+        }
+        if (!TryParseDecimal(proceedsStr, out var proceeds))
+        {
+            _logger.LogWarning("Skipping trade row for {Symbol} on {Date}: could not parse proceeds '{ProceedsStr}'", symbol, dateTimeStr, proceedsStr);
+            return;
+        }
+        if (!TryParseDecimal(commissionStr, out var commission))
+        {
+            _logger.LogWarning("Skipping trade row for {Symbol} on {Date}: could not parse commission '{CommissionStr}'", symbol, dateTimeStr, commissionStr);
+            return;
+        }
         TryParseDecimal(realizedPnlStr, out var realizedPnl);
 
         var tradeType = quantity > 0 ? TradeType.Buy : TradeType.Sell;
@@ -99,8 +127,8 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
             Math.Abs(commission), realizedPnl, tradeType));
     }
 
-    private static (string Symbol, string Currency, DateTime Date, decimal Amount)? TryParseIncomeRow(
-        List<string> fields, bool skipReversals)
+    private (string Symbol, string Currency, DateTime Date, decimal Amount)? TryParseIncomeRow(
+        List<string> fields, string sectionName, bool skipReversals)
     {
         if (fields.Count < 6) return null;
 
@@ -116,25 +144,37 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
         if (skipReversals && description.Contains("Reversal", StringComparison.OrdinalIgnoreCase)) return null;
 
         var symbol = ExtractSymbolFromDescription(description);
-        if (symbol == null) return null;
+        if (symbol == null)
+        {
+            _logger.LogWarning("Skipping {Section} row: could not extract symbol from '{Description}'", sectionName, description);
+            return null;
+        }
 
-        if (!TryParseDate(dateStr, out var date)) return null;
-        if (!TryParseDecimal(amountStr, out var amount)) return null;
+        if (!TryParseDate(dateStr, out var date))
+        {
+            _logger.LogWarning("Skipping {Section} row for {Symbol}: could not parse date '{DateStr}'", sectionName, symbol, dateStr);
+            return null;
+        }
+        if (!TryParseDecimal(amountStr, out var amount))
+        {
+            _logger.LogWarning("Skipping {Section} row for {Symbol} on {Date}: could not parse amount '{AmountStr}'", sectionName, symbol, dateStr, amountStr);
+            return null;
+        }
 
         return (symbol, currency, date, amount);
     }
 
-    private static void TryParseDividend(List<string> fields, List<RawDividend> dividends)
+    private void TryParseDividend(List<string> fields, List<RawDividend> dividends)
     {
-        var row = TryParseIncomeRow(fields, skipReversals: true);
+        var row = TryParseIncomeRow(fields, "dividend", skipReversals: true);
         if (row is null) return;
         var (symbol, currency, date, amount) = row.Value;
         dividends.Add(new RawDividend(symbol, currency, date, amount));
     }
 
-    private static void TryParseWithholdingTax(List<string> fields, List<RawWithholdingTax> taxes)
+    private void TryParseWithholdingTax(List<string> fields, List<RawWithholdingTax> taxes)
     {
-        var row = TryParseIncomeRow(fields, skipReversals: false);
+        var row = TryParseIncomeRow(fields, "withholding tax", skipReversals: false);
         if (row is null) return;
         var (symbol, currency, date, amount) = row.Value;
         taxes.Add(new RawWithholdingTax(symbol, currency, date, Math.Abs(amount)));
