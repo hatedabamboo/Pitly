@@ -10,6 +10,12 @@ function roundToFullPln(value: number): number {
   return Math.round(value);
 }
 
+// Art. 63 § 1a Ordynacji podatkowej — lump-sum tax under art. 30a ust. 1 pkt 1-3
+// is rounded to full groszy upward (footnote 5 on PIT-38(17) form).
+function roundToGroszUp(value: number): number {
+  return Math.ceil(value * 100) / 100;
+}
+
 function buildPit38(s: TaxSummary): Pit38Fields {
   const przychody = s.totalProceedsPln;
   const koszty = s.totalCostPln;
@@ -21,9 +27,9 @@ function buildPit38(s: TaxSummary): Pit38Fields {
   const podatek = Math.round(podstawa * TAX_RATE * 100) / 100;
   const podatekNalezny = roundToFullPln(podatek);
 
-  const zryczaltowanyPodatek = Math.round(s.totalDividendsPln * TAX_RATE * 100) / 100;
+  const zryczaltowanyPodatek = roundToGroszUp(s.totalDividendsPln * TAX_RATE);
   const podatekZaGranica = Math.round(Math.min(s.totalWithholdingPln, zryczaltowanyPodatek) * 100) / 100;
-  const roznica = roundToFullPln(Math.max(zryczaltowanyPodatek - podatekZaGranica, 0));
+  const roznica = roundToGroszUp(Math.max(zryczaltowanyPodatek - podatekZaGranica, 0));
   const podatekDoZaplaty = podatekNalezny + roznica;
 
   return {
@@ -143,7 +149,7 @@ export default function Pit38Page({ state }: { state: AppState }) {
         <FieldTable rows={[
           { poz: '45', name: 'Zryczaltowany podatek 19% od dywidend zagranicznych', value: pit38.poz45ZryczaltowanyPodatek },
           { poz: '46', name: 'Podatek zaplacony za granica (US withholding)', value: pit38.poz46PodatekZaplaconyZaGranica, note: 'Nie moze przekroczyc kwoty z poz. 45' },
-          { poz: '47', name: 'Roznica (poz. 45 \u2212 poz. 46)', value: pit38.poz47Roznica, note: 'Po zaokragleniu do pelnych zl' },
+          { poz: '47', name: 'Roznica (poz. 45 \u2212 poz. 46)', value: pit38.poz47Roznica, note: 'Zaokraglone do pelnych groszy w gore (art. 63 § 1a O.p.)' },
         ]} />
       </Section>
 

@@ -33,7 +33,7 @@ public record Pit38Fields(
     decimal Poz45ZryczaltowanyPodatek,
     // Poz. 46: Podatek zapłacony za granicą (capped at poz. 45, per art. 30a ust. 9)
     decimal Poz46PodatekZaplaconyZaGranica,
-    // Poz. 47: Różnica = poz. 45 − poz. 46 (rounded to full PLN)
+    // Poz. 47: Różnica = poz. 45 − poz. 46 (rounded per art. 63 § 1a O.p. — see footnote 5 on PIT-38(17))
     decimal Poz47Roznica,
     // Poz. 49: PODATEK DO ZAPŁATY = poz. 33 + poz. 47
     decimal Poz49PodatekDoZaplaty,
@@ -56,9 +56,11 @@ public record Pit38Fields(
         var podatekNalezny = RoundToFullPln(podatek);
 
         // Section G — Dividends
-        var zryczaltowanyPodatek = Math.Round(summary.TotalDividendsPln * TaxConstants.TaxRate, 2);
+        // Poz. 45/47 fall under art. 30a ust. 1 — per art. 63 § 1a Ordynacji podatkowej
+        // (footnote 5 on PIT-38(17)), amounts are rounded to full groszy upward, not full PLN.
+        var zryczaltowanyPodatek = RoundToGroszUp(summary.TotalDividendsPln * TaxConstants.TaxRate);
         var podatekZaGranica = Math.Round(Math.Min(summary.TotalWithholdingPln, zryczaltowanyPodatek), 2);
-        var roznica = RoundToFullPln(Math.Max(zryczaltowanyPodatek - podatekZaGranica, 0));
+        var roznica = RoundToGroszUp(Math.Max(zryczaltowanyPodatek - podatekZaGranica, 0));
 
         var podatekDoZaplaty = podatekNalezny + roznica;
 
@@ -86,4 +88,12 @@ public record Pit38Fields(
     /// </summary>
     private static decimal RoundToFullPln(decimal value)
         => Math.Round(value, 0, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// Rounds to full groszy upward per art. 63 § 1a Ordynacji podatkowej:
+    /// for lump-sum tax under art. 30a ust. 1 pkt 1-3, any fractional grosz rounds up.
+    /// Referenced by footnote 5 on PIT-38(17) form for poz. 44 and 47.
+    /// </summary>
+    private static decimal RoundToGroszUp(decimal value)
+        => Math.Ceiling(value * 100m) / 100m;
 }
