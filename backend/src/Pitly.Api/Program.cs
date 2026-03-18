@@ -29,6 +29,7 @@ builder.Services.AddScoped<ICapitalGainsTaxCalculator, CapitalGainsTaxCalculator
 builder.Services.AddScoped<IDividendTaxCalculator, DividendTaxCalculator>();
 builder.Services.AddScoped<ITaxCalculator, TaxCalculator>();
 builder.Services.AddScoped<IImportService, ImportService>();
+builder.Services.AddHostedService<SessionCleanupService>();
 
 builder.Services.AddCors(options =>
 {
