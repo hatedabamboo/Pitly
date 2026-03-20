@@ -128,7 +128,7 @@ export default function Pit38Page({ state }: { state: AppState }) {
           </table>
         </div>
         <div className="px-6 py-2 text-slate-500 text-xs">
-          IB does not issue PIT-8C — all income goes to row 2 &quot;Inne przychody&quot; (poz. 22-23).
+          Foreign brokers do not issue PIT-8C — all income goes to row 2 &quot;Inne przychody&quot; (poz. 22-23).
         </div>
       </Section>
 
@@ -270,7 +270,7 @@ function EpityGuide({ pit38, year, hasDividends }: { pit38: Pit38Fields; year: n
               <strong className="text-white">Przychody kapitalowe ze sprzedazy udzialow (PIT-38)</strong>
             </p>
             <p className="text-slate-500 text-xs">
-              Do NOT click &quot;PIT-8C&quot; — IB is a foreign broker and does not issue PIT-8C.
+              Do NOT click &quot;PIT-8C&quot; — foreign brokers do not issue PIT-8C.
             </p>
           </GuideStep>
 
@@ -351,7 +351,7 @@ function EpityGuide({ pit38, year, hasDividends }: { pit38: Pit38Fields; year: n
                   <p>
                     Enter <Val v={pit38.poz46PodatekZaplaconyZaGranica} /> (poz. 46)
                     <span className="block text-slate-500 text-xs">
-                      US withholding tax already deducted by IB, converted to PLN. Cannot exceed poz. 45.
+                      US withholding tax already deducted by your broker, converted to PLN. Cannot exceed poz. 45.
                     </span>
                   </p>
                 ) : (
