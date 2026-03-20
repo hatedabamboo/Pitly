@@ -5,5 +5,5 @@ public record ParsedStatement(
     List<RawDividend> Dividends,
     List<RawWithholdingTax> WithholdingTaxes);
 
-public record RawDividend(string Symbol, string Currency, DateTime Date, decimal Amount);
-public record RawWithholdingTax(string Symbol, string Currency, DateTime Date, decimal Amount);
+public record RawDividend(string Symbol, string Currency, DateTime Date, decimal Amount, string? Isin = null);
+public record RawWithholdingTax(string Symbol, string Currency, DateTime Date, decimal Amount, string? Isin = null);

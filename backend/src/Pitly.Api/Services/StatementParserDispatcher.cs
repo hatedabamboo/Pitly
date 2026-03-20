@@ -2,6 +2,7 @@ using Pitly.Broker.InteractiveBrokers;
 using Pitly.Broker.Trading212;
 using Pitly.Core.Models;
 using Pitly.Core.Parsing;
+using static Pitly.Core.Parsing.CsvHelpers;
 
 namespace Pitly.Api.Services;
 
@@ -23,18 +24,21 @@ public class StatementParserDispatcher : IStatementParser
         if (string.IsNullOrWhiteSpace(content))
             throw new FormatException("File is empty.");
 
-        var firstLine = content.AsSpan();
         var newlineIndex = content.IndexOfAny('\n', '\r');
-        if (newlineIndex > 0)
-            firstLine = content.AsSpan(0, newlineIndex);
+        var firstLine = newlineIndex > 0
+            ? content[..newlineIndex]
+            : content;
 
-        if (firstLine.StartsWith("Action,", StringComparison.OrdinalIgnoreCase))
+        var firstField = ParseCsvLine(firstLine)
+            .FirstOrDefault();
+
+        if (string.Equals(Clean(firstField), "Action", StringComparison.OrdinalIgnoreCase))
             return _t212Parser.Parse(content);
 
-        if (firstLine.Contains("Statement,".AsSpan(), StringComparison.Ordinal) ||
-            firstLine.Contains("Trades,".AsSpan(), StringComparison.Ordinal) ||
-            firstLine.Contains("Dividends,".AsSpan(), StringComparison.Ordinal) ||
-            firstLine.Contains("Withholding Tax,".AsSpan(), StringComparison.Ordinal))
+        if (firstLine.Contains("Statement,", StringComparison.Ordinal) ||
+            firstLine.Contains("Trades,", StringComparison.Ordinal) ||
+            firstLine.Contains("Dividends,", StringComparison.Ordinal) ||
+            firstLine.Contains("Withholding Tax,", StringComparison.Ordinal))
             return _ibParser.Parse(content);
 
         throw new FormatException(

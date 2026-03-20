@@ -23,23 +23,36 @@ public class DividendTaxCalculator : IDividendTaxCalculator
 
         foreach (var div in rawDividends)
         {
-            var matchingTax = rawWithholdingTaxes
-                .FirstOrDefault(t => t.Symbol == div.Symbol && t.Date == div.Date);
-
-            var withholdingAmount = matchingTax?.Amount ?? 0;
-
             var rate = await _rateService.GetRateAsync(div.Currency, div.Date);
             var amountPln = div.Amount * rate;
+            var matchingTaxes = rawWithholdingTaxes
+                .Where(t => IsMatch(div, t))
+                .ToList();
 
-            decimal withholdingPln;
-            if (matchingTax != null && !matchingTax.Currency.Equals(div.Currency, StringComparison.OrdinalIgnoreCase))
+            var withholdingAmount = matchingTaxes.Sum(t => t.Amount);
+            var withholdingCurrencies = matchingTaxes
+                .Select(t => t.Currency)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (withholdingCurrencies.Count > 1)
             {
-                var withholdingRate = await _rateService.GetRateAsync(matchingTax.Currency, div.Date);
-                withholdingPln = withholdingAmount * withholdingRate;
+                throw new InvalidOperationException(
+                    $"Dividend withholding tax for {div.Symbol} on {div.Date:yyyy-MM-dd} uses multiple currencies. " +
+                    "This Trading 212 export is not supported safely.");
             }
-            else
+
+            decimal withholdingPln = 0;
+            foreach (var tax in matchingTaxes)
             {
-                withholdingPln = withholdingAmount * rate;
+                if (tax.Amount == 0)
+                    continue;
+
+                var withholdingRate = tax.Currency.Equals(div.Currency, StringComparison.OrdinalIgnoreCase)
+                    ? rate
+                    : await _rateService.GetRateAsync(tax.Currency, div.Date);
+
+                withholdingPln += tax.Amount * withholdingRate;
             }
 
             results.Add(new Dividend(
@@ -54,5 +67,16 @@ public class DividendTaxCalculator : IDividendTaxCalculator
         }
 
         return results;
+    }
+
+    private static bool IsMatch(RawDividend dividend, RawWithholdingTax tax)
+    {
+        if (dividend.Date != tax.Date)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(dividend.Isin) || !string.IsNullOrWhiteSpace(tax.Isin))
+            return string.Equals(dividend.Isin, tax.Isin, StringComparison.OrdinalIgnoreCase);
+
+        return string.Equals(dividend.Symbol, tax.Symbol, StringComparison.OrdinalIgnoreCase);
     }
 }

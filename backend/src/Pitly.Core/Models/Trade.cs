@@ -10,7 +10,8 @@ public record Trade(
     decimal Commission,
     string CommissionCurrency,
     decimal RealizedPnL,
-    TradeType Type);
+    TradeType Type,
+    string? Isin = null);
 
 public enum TradeType { Buy, Sell }
 

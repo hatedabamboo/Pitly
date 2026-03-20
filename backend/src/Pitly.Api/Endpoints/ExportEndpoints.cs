@@ -56,7 +56,7 @@ public static class ExportEndpoints
                     d.WithholdingTaxPln.ToString("F2", CultureInfo.InvariantCulture)));
             }
 
-            return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"ib-tax-{session.Year}.csv");
+            return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"pitly-tax-{session.Year}.csv");
         });
     }
 }

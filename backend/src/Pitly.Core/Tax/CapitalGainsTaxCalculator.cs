@@ -27,19 +27,17 @@ public class CapitalGainsTaxCalculator : ICapitalGainsTaxCalculator
         foreach (var trade in sorted)
         {
             var rate = await _rateService.GetRateAsync(trade.Currency, trade.DateTime);
+            var lotKey = GetLotKey(trade);
 
-            if (!buyLots.ContainsKey(trade.Symbol))
-                buyLots[trade.Symbol] = new LinkedList<(decimal, decimal, decimal)>();
+            if (!buyLots.ContainsKey(lotKey))
+                buyLots[lotKey] = new LinkedList<(decimal, decimal, decimal)>();
 
             if (trade.Type == TradeType.Buy)
             {
                 var costPerSharePln = trade.Price * rate;
-                var commissionRate = trade.CommissionCurrency.Equals(trade.Currency, StringComparison.OrdinalIgnoreCase)
-                    ? rate
-                    : await _rateService.GetRateAsync(trade.CommissionCurrency, trade.DateTime);
-                var commissionPln = trade.Commission * commissionRate;
+                var commissionPln = await GetCommissionPlnAsync(trade, rate);
                 var commissionPerSharePln = commissionPln / trade.Quantity;
-                buyLots[trade.Symbol].AddLast((trade.Quantity, costPerSharePln, commissionPerSharePln));
+                buyLots[lotKey].AddLast((trade.Quantity, costPerSharePln, commissionPerSharePln));
 
                 var totalCostPln = trade.Quantity * costPerSharePln + commissionPln;
 
@@ -60,16 +58,13 @@ public class CapitalGainsTaxCalculator : ICapitalGainsTaxCalculator
             else
             {
                 var proceedsPln = trade.Proceeds * rate;
-                var sellCommissionRate = trade.CommissionCurrency.Equals(trade.Currency, StringComparison.OrdinalIgnoreCase)
-                    ? rate
-                    : await _rateService.GetRateAsync(trade.CommissionCurrency, trade.DateTime);
-                var sellCommissionPln = trade.Commission * sellCommissionRate;
+                var sellCommissionPln = await GetCommissionPlnAsync(trade, rate);
                 var netProceedsPln = proceedsPln - sellCommissionPln;
 
                 decimal totalCostPln = 0;
                 var remainingQty = trade.Quantity;
 
-                if (!buyLots.TryGetValue(trade.Symbol, out var lots) || lots.Count == 0)
+                if (!buyLots.TryGetValue(lotKey, out var lots) || lots.Count == 0)
                     throw new InvalidOperationException(
                         $"Cannot sell {trade.Quantity} shares of {trade.Symbol} on {trade.DateTime:yyyy-MM-dd}: no buy lots available. " +
                         "The statement may be incomplete — ensure all prior buy trades are included.");
@@ -118,4 +113,20 @@ public class CapitalGainsTaxCalculator : ICapitalGainsTaxCalculator
 
         return results;
     }
+
+    private async Task<decimal> GetCommissionPlnAsync(Trade trade, decimal tradeRate)
+    {
+        if (trade.Commission == 0)
+            return 0;
+
+        var commissionRate = trade.CommissionCurrency.Equals(trade.Currency, StringComparison.OrdinalIgnoreCase)
+            ? tradeRate
+            : await _rateService.GetRateAsync(trade.CommissionCurrency, trade.DateTime);
+
+        return trade.Commission * commissionRate;
+    }
+
+    private static string GetLotKey(Trade trade) => string.IsNullOrWhiteSpace(trade.Isin)
+        ? trade.Symbol
+        : trade.Isin;
 }

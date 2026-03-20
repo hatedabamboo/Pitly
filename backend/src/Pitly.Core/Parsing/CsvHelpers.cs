@@ -16,7 +16,15 @@ public static class CsvHelpers
             var c = line[i];
             if (c == '"')
             {
-                inQuotes = !inQuotes;
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
             }
             else if (c == ',' && !inQuotes)
             {
@@ -32,7 +40,11 @@ public static class CsvHelpers
         return fields;
     }
 
-    public static string Clean(string value) => value.Trim().Trim('"').Trim();
+    public static string Clean(string? value) => (value ?? string.Empty)
+        .Trim()
+        .TrimStart('\uFEFF')
+        .Trim('"')
+        .Trim();
 
     public static bool TryParseDecimal(string? s, out decimal result)
     {
