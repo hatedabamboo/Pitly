@@ -46,4 +46,39 @@ public class InteractiveBrokersStatementParserTests
         Assert.Equal(4m, split.Factor);
         Assert.Equal("US45841N1072", split.Isin);
     }
+
+    [Fact]
+    public void Parse_ReversedDividendIsNetted()
+    {
+        var csv = """
+                  Dividends,Header,Currency,Date/Time,Description,Amount
+                  Dividends,Data,USD,2024-07-02,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share (Ordinary Dividend)",1.8
+                  Dividends,Data,USD,2024-07-03,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share (Ordinary Dividend)",1.8
+                  Dividends,Data,USD,2024-07-03,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share - Reversal (Ordinary Dividend)",-1.8
+                  """;
+
+        var parsed = Parser.Parse(csv);
+
+        var dividend = Assert.Single(parsed.Dividends);
+        Assert.Equal("STM", dividend.Symbol);
+        Assert.Equal(new DateTime(2024, 7, 2), dividend.Date);
+        Assert.Equal(1.8m, dividend.Amount);
+    }
+
+    [Fact]
+    public void Parse_ReversedWithholdingTaxIsNetted()
+    {
+        var csv = """
+                  Dividends,Header,Currency,Date/Time,Description,Amount
+                  Dividends,Data,USD,2024-07-02,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share (Ordinary Dividend)",1.8
+                  Withholding Tax,Header,Currency,Date/Time,Description,Amount
+                  Withholding Tax,Data,USD,2024-07-02,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share - US Tax",-0.27
+                  Withholding Tax,Data,USD,2024-07-02,"STM(IE00BK5BCQ80) Cash Dividend USD 0.09 per Share - US Tax - Reversal",0.27
+                  """;
+
+        var parsed = Parser.Parse(csv);
+
+        Assert.Single(parsed.Dividends);
+        Assert.Empty(parsed.WithholdingTaxes);
+    }
 }

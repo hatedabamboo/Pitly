@@ -111,8 +111,8 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
 
         return new ParsedStatement(
             trades,
-            dividends,
-            withholdingTaxes,
+            NetDividends(dividends),
+            NetWithholdingTaxes(withholdingTaxes),
             corporateActions,
             carryInPositions,
             statementYear);
@@ -190,7 +190,7 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
     }
 
     private (string Symbol, string? Isin, string Currency, DateTime Date, decimal Amount)? TryParseIncomeRow(
-        List<string> fields, string sectionName, bool skipReversals)
+        List<string> fields, string sectionName)
     {
         if (fields.Count < 2) return null;
 
@@ -209,7 +209,6 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
         var amountStr = Clean(fields[5]);
 
         if (description.Contains("Total", StringComparison.OrdinalIgnoreCase)) return null;
-        if (skipReversals && description.Contains("Reversal", StringComparison.OrdinalIgnoreCase)) return null;
 
         var instrument = ExtractInstrumentFromDescription(description);
         if (instrument is null)
@@ -236,7 +235,7 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
 
     private void TryParseDividend(List<string> fields, List<RawDividend> dividends)
     {
-        var row = TryParseIncomeRow(fields, "dividend", skipReversals: true);
+        var row = TryParseIncomeRow(fields, "dividend");
         if (row is null) return;
         var (symbol, isin, currency, date, amount) = row.Value;
         dividends.Add(new RawDividend(symbol, currency, date, amount, isin));
@@ -244,10 +243,28 @@ public partial class InteractiveBrokersStatementParser : IStatementParser
 
     private void TryParseWithholdingTax(List<string> fields, List<RawWithholdingTax> taxes)
     {
-        var row = TryParseIncomeRow(fields, "withholding tax", skipReversals: false);
+        var row = TryParseIncomeRow(fields, "withholding tax");
         if (row is null) return;
         var (symbol, isin, currency, date, amount) = row.Value;
-        taxes.Add(new RawWithholdingTax(symbol, currency, date, Math.Abs(amount), isin));
+        taxes.Add(new RawWithholdingTax(symbol, currency, date, amount, isin));
+    }
+
+    private static List<RawDividend> NetDividends(List<RawDividend> dividends)
+    {
+        return dividends
+            .GroupBy(d => (d.Symbol, d.Isin, d.Currency, d.Date))
+            .Select(g => new RawDividend(g.Key.Symbol, g.Key.Currency, g.Key.Date, g.Sum(d => d.Amount), g.Key.Isin))
+            .Where(d => d.Amount > 0)
+            .ToList();
+    }
+
+    private static List<RawWithholdingTax> NetWithholdingTaxes(List<RawWithholdingTax> taxes)
+    {
+        return taxes
+            .GroupBy(t => (t.Symbol, t.Isin, t.Currency, t.Date))
+            .Select(g => new RawWithholdingTax(g.Key.Symbol, g.Key.Currency, g.Key.Date, Math.Abs(g.Sum(t => t.Amount)), g.Key.Isin))
+            .Where(t => t.Amount > 0)
+            .ToList();
     }
 
     private static (string Symbol, string? Isin)? ExtractInstrumentFromDescription(string description)
